@@ -1,10 +1,8 @@
 """MURAQIB canonical client — the single supported way for an EXTERNAL integrator to call the
 MURAQIB governance rail.
 
-Merged from the six divergent in-tree copies (see README "Provenance"):
-  * JWT exchange + token caching + refresh-on-401 ...... the MASSAR coordinator client (reference)
-  * Ed25519 four-eyes assertion signing ................ product clients (mizan/maarifa/midad/rabt)
-  * typed decision object, health(), decorator ......... the legacy MURAQIB SDK
+Consolidates the behaviours previously spread across several internal clients: JWT exchange with
+token caching and refresh-on-401; Ed25519 four-eyes assertion signing; a typed decision object.
 This is the first client where JWT auth and four-eyes signing exist together.
 
 FAIL-CLOSED, WITHOUT EXCEPTION. Every failure mode -- connection error, timeout, non-200 (including
@@ -37,7 +35,7 @@ DEFAULT_TIMEOUT_S = 10.0
 _TOKEN_SKEW_S = 60          # refresh this long before expiry
 _USER_AGENT = "muraqib-client/" + __version__
 
-# LOAD-BEARING: byte-identical to the MURAQIB assertion verifier.CANONICAL_FIELDS_V2.
+# LOAD-BEARING: byte-identical to the server-side assertion verifier.
 # Changing the list, the order, or the canonicalisation below invalidates every signature.
 CANONICAL_FIELDS_V2 = [
     "agent_id", "action_type", "request_ref",
@@ -94,7 +92,7 @@ def _unavailable(reason, detail=None):
 
 
 def _canonicalize(assertion, fields=CANONICAL_FIELDS_V2):
-    """BYTE-IDENTICAL to the MURAQIB assertion verifier.canonicalize."""
+    """BYTE-IDENTICAL to the server-side assertion canonicalisation."""
     d = {}
     for k in fields:
         v = assertion.get(k, None)

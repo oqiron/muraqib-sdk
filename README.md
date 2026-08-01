@@ -1,154 +1,229 @@
 # muraqib-client
 
-Canonical Python client for the **MURAQIB** AI-governance rail.
+**MURAQIB is a governance rail for AI agents.** Before your agent performs a consequential action, it
+declares that action to MURAQIB and receives a verdict — approved, blocked, or escalated to a human.
+Every verdict is written to a cryptographically sealed, hash-chained evidence record that is
+periodically anchored with an offline signature, so what your agent was permitted to do is provable
+after the fact.
+
+This is the canonical Python client.
+
+---
+
+## Install
 
 ```bash
-pip install muraqib-client              # clearance, verify, health — stdlib only
-pip install muraqib-client[signing]     # + Ed25519 four-eyes assertion signing
+pip install git+https://github.com/oqiron/muraqib-client.git              # core, zero dependencies
+pip install "git+https://github.com/oqiron/muraqib-client.git#egg=muraqib-client[signing]"
 ```
+
+The core is standard-library only. The `[signing]` extra adds `cryptography` and is required **only**
+for four-eyes authorized actions (Ed25519 assertion signing — the Python standard library cannot do
+Ed25519). Without it, those calls fail closed rather than being sent unsigned.
+
+> Replace the URL above with the repository you were given. This package is not on PyPI.
+
+## Get credentials
+
+**There is no self-serve signup.** Contact OQIRON to be issued:
+
+| you receive | what it is |
+|---|---|
+| an **API key** | authenticates your agent; carries scopes (`intercept`, `read`) |
+| an **agent identity** | e.g. `ACME-PRD-001` — registered server-side, with its environment (production or sandbox) |
+| optionally, **Ed25519 key registration** | required only if you perform four-eyes authorized actions |
+
+Your environment, your registered scope, and your tenant are all **server-side properties of the
+identity you were issued**. You do not select them and you cannot change them from the client.
+
+## Your first cleared action
 
 ```python
 from muraqib_client import MuraqibClient
 
-m = MuraqibClient(api_key="...", agent_id="ACME-PRD-001",
-                  muraqib_url="https://muraqib.oqiron.ai")
+m = MuraqibClient(
+    api_key="<your key>",
+    agent_id="ACME-PRD-001",
+    muraqib_url="https://muraqib.oqiron.ai",
+)
 
-d = m.clear("SEND_EMAIL", summary="Quarterly update to the client list",
-            request_ref="REQ-2026-0142")
+d = m.clear(
+    action_type="EMAIL",                       # MUST be a recognized value — see docs/action-types.md
+    summary="Quarterly update to the client distribution list",
+    request_ref="REQ-2026-0142",               # your own correlation id
+)
 
-if not d.governed:          # UNAVAILABLE — the rail did not adjudicate
-    raise SystemExit("not cleared: %s" % d.reason)   # DO NOT PROCEED
+if not d.governed:                             # UNAVAILABLE — the rail did not adjudicate
+    raise SystemExit("not cleared: %s" % d.reason)          # DO NOT PROCEED
+
 if d.approved:
-    send_the_email()
+    send_the_email()                           # cleared; evidence sealed as d.evidence_id
+elif d.blocked:
+    log_refusal(d.evidence_id, d.safe_action)  # terminal — do not perform the action
+elif d.escalated:
+    hand_to_human(d.evidence_id)               # STOP. See "ESCALATED means stop" below.
 ```
 
 ---
 
-## Read this before you integrate
+# READ THIS FIRST
 
-### 1. The declared risk flags do **not** affect the verdict
-The rail accepts a number of declared fields — `financial_amount`, `contains_pii`, `is_external`,
-`priority`, `regulatory_risk`, `involves_trading`, `involves_hr`, `financial_advice`, `involves_tax`,
-`public_communication`, `new_it_system`, `autonomous_decision`, `is_board_decision`,
-`data_classified`. **None of them changes the decision.**
+Four things surprise every new integrator. Read them before you write code.
 
-The authoritative control catalogue adjudicates on exactly three things:
+### 1. `ESCALATED` means STOP. There is no resume path.
 
-1. **`action_type`** — the intrinsic identity of the action;
-2. **server-derived facts** — your agent's registration, scope, freeze state, environment,
-   action velocity, the server clock (off-hours). Never anything you send;
-3. **four-eyes attestations** — the signed authorizer/maker assertion (below).
+`ESCALATED` is not "pending" and not "retry later". **The API has no endpoint that resumes an
+escalated action.** There is no callback, no webhook, no polling endpoint, and no status that later
+flips to approved. Do not write code that waits for one.
 
-Declared flags are **recorded in the evidence record**, so they are part of the audit trail and can
-be held against you — but they are not the basis of the verdict. Do not build logic on the belief
-that setting `contains_pii=True` will cause a block, and do not assume omitting it avoids one.
+The action stops. A human reviews the sealed evidence record out of band. If the work is to proceed,
+it proceeds as a **new** clearance call — and for the four hold/authorized action pairs, that new call
+is the `*_AUTHORIZED` action type carrying a signed four-eyes assertion. That is a fresh declaration,
+not a continuation.
 
-### 2. MURAQIB governs the declaration, not the payload
-The rail never sees, parses or stores your actual content. It governs **what you declared you were
-about to do**. Clearance is not content inspection; an approved decision says the declared action
-was permitted for that agent at that moment, nothing about the bytes you subsequently send.
+### 2. `action_type` must be one of the 103 recognized values
 
-### 3. `UNAVAILABLE` means **not cleared**
-Every failure mode resolves to `decision == "UNAVAILABLE"`:
+The full list is in **[docs/action-types.md](docs/action-types.md)**. Matching is exact. There is no
+fuzzy matching and no nearest-neighbour suggestion. An unrecognized value is classified as
+unclassified and escalates via **`TAXO-00 — escalate-on-unknown`**.
 
-| condition | result |
+Real near-misses:
+
+| you might send | reality |
 |---|---|
-| connection refused / DNS / TLS failure | `UNAVAILABLE` |
-| timeout | `UNAVAILABLE` |
-| any non-200 (incl. `503 environment_unresolved`) | `UNAVAILABLE` |
-| malformed or unparseable JSON | `UNAVAILABLE` |
-| missing / rejected credential | `UNAVAILABLE` |
-| missing signing key, or `[signing]` extra not installed | `UNAVAILABLE` |
-| Ed25519 signing error | `UNAVAILABLE` (the call is **never sent unsigned**) |
+| `SEND_EMAIL` | not a value — use `EMAIL` |
+| `EXECUTE_TRADE` | not a value — use `TRADE_EXECUTION` |
+| `DOCUMENT_PROCESSING` | not recognized at all |
 
-**It is never safe to proceed on `UNAVAILABLE`.** It is not a soft failure, not a degraded pass, and
-not something to retry-then-ignore. The action was not governed; if you perform it anyway, you have
-an ungoverned action and no evidence record. Use `decision.governed` — `True` only for a real
-`APPROVED` / `BLOCKED` / `ESCALATED` verdict from the rail.
+Each of those returns `ESCALATED / TAXO-00`. If your first integration call escalates, check this
+first — it is almost always the cause.
 
-**There is no `fail_safe="allow"`.** Earlier internal clients offered a mode that fabricated an
-`APPROVED` result when the rail was unreachable. That branch does not exist here and will not be
-added. A governance client that invents approvals is not a governance client.
+### 3. Fifteen declaration fields are recorded but do NOT affect the verdict
 
-### 4. Sandbox: the client sends nothing
-Environment (production vs sandbox) is **server-derived** from your registered agent. The rail
-ignores and logs any `environment` field a client sends. Sandbox agents seal to a separate chain
-with its own lineage, never anchored, structurally invisible to production reads.
+These fields are sealed into the evidence record and form part of your audit trail. **None of them
+changes the decision:**
 
-Two consequences: you do not select your environment — registration does; and if the rail cannot
-resolve your agent's environment it **refuses the call** (`503`), which this client surfaces as
-`UNAVAILABLE`. The one place `environment` *is* a real parameter is `verify()`, where an agent
-principal may verify only its own environment's chain (a cross-environment request is refused 403).
+`is_external`, `has_attachment`, `contains_pii`, `regulatory_risk`, `financial_amount`, `priority`,
+`is_board_decision`, `involves_trading`, `involves_hr`, `financial_advice`, `involves_tax`,
+`public_communication`, `new_it_system`, `autonomous_decision`, `data_classified`
 
-### 5. Four-eyes assertions need the signing extra
-Authorized-class actions carry a signed 10-field V2 canonical assertion. The Python standard library
-cannot do Ed25519, so signing lives behind `pip install muraqib-client[signing]` (adds
-`cryptography`). Everything else remains dependency-free. Without the extra, a four-eyes call
-returns `UNAVAILABLE` — it is never downgraded to an unsigned call.
+Setting `contains_pii=True` will not cause a block. Omitting `financial_amount` will not avoid one.
+Declare them accurately — they are recorded and can be held against you — but do not build control
+flow on the belief that they drive the verdict.
+
+**What actually decides:** `action_type`; server-derived facts about your agent (registration, scope,
+freeze state, environment, action velocity, the server clock); and the four-eyes attestations.
+
+### 4. `UNAVAILABLE` means not-cleared. Never proceed.
+
+Every client-side failure — unreachable rail, timeout, non-200, malformed response, missing
+credential, signing failure — resolves to `decision == "UNAVAILABLE"`. It is **not** a soft failure
+and **not** a degraded pass.
 
 ```python
-d = m.clear("EXTERNAL_CORRESPONDENCE_AUTHORIZED",
-            request_ref="REQ-2026-0142",
-            held_evidence_id="EVD-…",
-            authorizer={"id": "u-8812", "email": "head@acme.example",
-                        "role": "SECTION_HEAD", "is_section_head": True,
-                        "maker_ids": ["u-4410"]})
+if not d.governed:      # True only for APPROVED / BLOCKED / ESCALATED from the rail
+    # the action was NOT governed. Performing it anyway leaves you with an
+    # ungoverned action and no evidence record.
 ```
 
-`MURAQIB_SIGNING_KEY` (hex Ed25519 private key) is read from the environment. Key material is held
-in memory only — never logged, never echoed, never sealed.
+There is no "allow on failure" mode in this client, and one will not be added.
 
 ---
+
+## What each verdict means, and what to do
+
+| verdict | meaning | your next action |
+|---|---|---|
+| `APPROVED` | permitted for this agent, at this moment | proceed; keep `evidence_id` |
+| `BLOCKED` | refused. Terminal. | do not perform it; `safe_action` explains why |
+| `ESCALATED` | requires human authority | **stop**; hand `evidence_id` to a human; no resume path |
+| `UNAVAILABLE` | the rail did not adjudicate (client-side) | **stop**; do not proceed; fix and re-call |
+
+`requires_approval` is `true` for both `BLOCKED` and `ESCALATED`.
+
+## Sandbox vs production
+
+Your environment is **server-derived from your registered agent identity**. The client sends nothing;
+if you send an `environment` field it is ignored and logged.
+
+| | production | sandbox |
+|---|---|---|
+| evidence chain | the production chain | a **separate** chain, own lineage and seed |
+| offline anchoring | periodically anchored | **never anchored, by design** |
+| operator notifications | dispatched | **suppressed** |
+| visibility | production reads | structurally invisible to production reads |
+
+`verify(environment="sandbox")` on a sandbox chain correctly reports `tip_status: "no-signed-tip"`
+and `anchor_status: "not anchored - sandbox chains are not anchored by design"`. **That is not a
+defect** — sandbox chains are deliberately never anchored.
+
+An agent principal may verify only its **own** environment; asking for the other one is refused
+(`403 forbidden_environment`). If the rail cannot resolve your agent's environment it **refuses the
+call** (`503`), which this client surfaces as `UNAVAILABLE` — nothing is sealed.
 
 ## API
 
 | method | returns | raises |
 |---|---|---|
 | `clear(action_type, summary, request_ref, authorizer=None, held_evidence_id=None, **declaration)` | `Decision` | never |
-| `intercept(...)` | alias of `clear` | never |
-| `clear_action(...)` | alias of `clear` (in-tree client compatibility) | never |
+| `intercept(...)` / `clear_action(...)` | aliases of `clear` | never |
 | `verify(environment=None)` | `{"ok", "summary", "error"}` | never |
 | `health()` | `bool` | never |
 
-**Exception surface:** the only thing that raises is `MuraqibClient(...)` construction, and only on
-programmer error (`auth_mode` not in `{"jwt","api_key"}`). No call path raises — failures are values,
-not exceptions, because an exception is easy to catch-and-continue and a governance failure must not
-be. `Decision` is a `dict` subclass, so it survives `json.dumps` and logging unchanged.
+The only raise in the client is construction with an invalid `auth_mode`. **No call path raises** —
+failures are values, because an exception is easy to catch-and-continue and a governance failure
+must not be. `Decision` subclasses `dict`, so it logs and serialises unchanged.
 
-**Authentication.** `auth_mode="jwt"` (default) exchanges your API key for a short-lived token,
-caches it, and refreshes once on a `401`. `auth_mode="api_key"` sends `X-API-Key` directly.
+**Auth.** `auth_mode="jwt"` (default) exchanges your API key for a 24-hour token, caches it, and
+re-exchanges once on a `401`. `auth_mode="api_key"` sends `X-API-Key` directly. There is no refresh
+token — re-exchange is the only recovery.
 
-**Versioning.** The client sends `X-Muraqib-Client: muraqib-client/<version>` on every request so the
-rail can log client versions. `muraqib_client.__version__` is the constant.
+**Four-eyes.** Requires the `[signing]` extra and a **registered public key**:
 
----
+```python
+d = m.clear("EXTERNAL_CORRESPONDENCE_AUTHORIZED",
+            request_ref="REQ-2026-0142",
+            held_evidence_id="EVD-…",             # the escalated hold this authorizes
+            authorizer={"id": "u-8812", "email": "head@acme.example",
+                        "role": "SECTION_HEAD", "is_section_head": True,
+                        "maker_ids": ["u-4410"]})
+```
 
-## Provenance — what came from where
+`MURAQIB_SIGNING_KEY` (hex Ed25519 private key) is read from the environment. Key material stays in
+memory — never logged, never echoed, never sealed.
 
-This client consolidates six divergent in-tree copies:
+## Boundaries — what MURAQIB does not do
 
-| source | contributed |
-|---|---|
-| the MASSAR coordinator client | JWT exchange, token caching, refresh-on-401, `UNAVAILABLE` discipline (reference implementation) |
-| `mizan` / `maarifa` / `midad` / `rabt` product clients | Ed25519 four-eyes signing, `CANONICAL_FIELDS_V2`, never-send-unsigned rule, stdlib-only transport |
-| the legacy MURAQIB SDK | typed decision object, `health()` |
-| — dropped — | `fail_safe="allow"` (silent approval on unreachable rail) |
+- **It governs the declaration, not the payload.** The rail never sees, parses, or stores your
+  content. An approval says the *declared* action was permitted; it says nothing about the bytes you
+  then send.
+- **One global chain per environment — not per tenant.** There are **no per-tenant inclusion
+  proofs**. A tenant cannot independently prove its own subset of the chain.
+- **Not an accredited certifier.** Evidence is sealed and offline-anchored. That is a cryptographic
+  property, not a regulatory attestation, and no regulator has accredited it.
+- **Signature verification is skipped for agents without a registered public key.** If your identity
+  has no key registered server-side, four-eyes fields you send are **not signature-checked** — the
+  attested values are still adjudicated, but no cryptographic binding exists. If you need that
+  binding, you must have a key registered.
+- **`permitted_actions` is only partly enforced.** It gates a control for a small set of action
+  domains; elsewhere it is decorative. Do not read it as a general authorization surface.
+- **Chain integrity is only as fresh as the last anchor.** Between anchors, `pending_anchor > 0` and
+  `tip_status` reads `tip-mismatch`. That is expected, not tampering.
+- **`ESCALATED` has no API resume path** (see above).
 
-**This is the first client in which JWT authentication and four-eyes signing exist together.**
+## Documentation
 
-`CANONICAL_FIELDS_V2` and `_canonicalize()` are **byte-identical** to the server's
-`assertion_verifier`. Changing the field list, its order, or the JSON separators invalidates every
-signature the rail will accept.
+- **[docs/action-types.md](docs/action-types.md)** — all 103 recognized `action_type` values
+- **[docs/integration-standard-v3.md](docs/integration-standard-v3.md)** — the formal contract
 
-## Scope: external integrators only
+## Scope: external integrators
 
-This package is for **external integrators**. The six in-tree copies listed above are still in use by
-their own products and have **not** been migrated to this client. That consolidation is a separate,
-deliberately deferred piece of work — recorded here so it is not forgotten:
+This package is for external integrators. OQIRON's own products still use their own in-tree clients;
+consolidating them onto this package is separate, deferred work, recorded here so it is not
+forgotten:
 
-> **PENDING:** migrate the MASSAR coordinator client, the per-product clients
-> and the legacy MURAQIB SDK (9 internal consumers) onto `muraqib-client`. Until then,
-> internal products continue to use their own clients and this package is not the only client in play.
+> **PENDING:** migrate the internal product clients and their consumers onto `muraqib-client`. Until
+> then this is not the only client in use against the rail.
 
 ## License
 
