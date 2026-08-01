@@ -11,8 +11,17 @@ from v2. Where v2 disagrees, v2 is wrong; the differences are enumerated in §10
 
 `POST /api/auth/token`
 
-The key may be supplied **either** in the body as `{"api_key": "..."}` **or** as an `X-API-Key`
-header. Both are accepted.
+The key may be supplied in the body as `{"api_key": "..."}` **or** as an `X-API-Key` header — but
+**a JSON body is mandatory either way.**
+
+```
+POST /api/auth/token          -H 'Content-Type: application/json'  -H 'X-API-Key: <key>'  -d '{}'
+POST /api/auth/token          -H 'Content-Type: application/json'  -d '{"api_key": "<key>"}'
+```
+
+> **Trap, verified against the running service.** A header-only request with **no body at all**
+> returns **400 Bad Request** — the request body is parsed before the handler reads the header, so an
+> absent body fails first. Send at least `{}`. This client always does.
 
 | response field | meaning |
 |---|---|
