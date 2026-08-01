@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "muraqib-client"
+version = "2.0.0"
+description = "Canonical client for the MURAQIB AI-governance rail — fail-closed clearance, four-eyes assertion signing, chain verification."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+authors = [{ name = "OQIRON" }]
+keywords = ["governance", "ai-governance", "compliance", "audit", "muraqib", "oqiron"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+
+# Core transport is stdlib-only (urllib). No runtime dependencies.
+dependencies = []
+
+[project.optional-dependencies]
+# Ed25519 four-eyes assertion signing. The Python standard library cannot do Ed25519, so signing
+# is an explicit opt-in extra. WITHOUT it, four-eyes calls fail closed to UNAVAILABLE — they are
+# never sent unsigned. Everything else (clearance, verify, health) works stdlib-only.
+signing = ["cryptography>=41.0"]
+
+[project.urls]
+Homepage = "https://oqiron.ai"
+
+[tool.setuptools]
+packages = ["muraqib_client"]
