@@ -1,6 +1,6 @@
 # muraqib-client
 
-**MURAQIB is a governance rail for AI agents.** Before your agent performs a consequential action, it
+**MURAQIB is a clearance rail for AI agents.** Before your agent performs a consequential action, it
 declares that action to MURAQIB and receives a verdict — approved, blocked, or escalated to a human.
 Every verdict is written to a cryptographically sealed, hash-chained evidence record that is
 periodically anchored with an offline signature, so what your agent was permitted to do is provable
