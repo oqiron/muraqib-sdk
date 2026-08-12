@@ -57,14 +57,14 @@ fails.
 > **Shell commands, in the same activated terminal.**
 
 ```bash
-pip install git+https://github.com/oqiron/muraqib-sdk.git
+pip install git+https://github.com/oqiron/muraqib-sdk.git@v2.0.0
 ```
 
 Only if you will perform four-eyes authorized actions (most integrations do not — see
 [Four-eyes](#four-eyes-authorized-actions)), install the signing extra instead:
 
 ```bash
-pip install "muraqib-client[signing] @ git+https://github.com/oqiron/muraqib-sdk.git"
+pip install "muraqib-client[signing] @ git+https://github.com/oqiron/muraqib-sdk.git@v2.0.0"
 ```
 
 Check it worked:
