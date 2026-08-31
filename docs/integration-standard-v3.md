@@ -74,6 +74,16 @@ An API key may be sent directly instead of exchanging it. On the mutating routes
 A separate server-side allowlist gates a small set of additional read routes. It is **not
 discoverable by the caller** — if you need one of those routes, that is arranged with OQIRON.
 
+> **Every key currently carries both scopes, and they are not selectable.** The issuing route does
+> not expose a scope parameter, so every key ever minted receives `intercept, read` — every key in
+> the store carries exactly that pair. You cannot request an intercept-only credential, and a
+> sandbox key is structurally identical to a production one: **the scopes on your key say nothing
+> about which environment you are in.** What separates the environments is the agent identity's
+> server-side environment (§2.5), never the key.
+>
+> A third scope value, `write`, exists in the store on historical keys. It gates nothing in this
+> deployment and is not issued.
+
 ---
 
 ## 2. `POST /api/v2/intercept` — the clearance call
@@ -164,6 +174,30 @@ There is no `policies_fired` field. If you are reading one, you are on an old bu
 | **500** | evidence write failed — nothing was sealed |
 
 Treat everything that is not a `200` carrying a valid `decision` as **not cleared**.
+
+### 2.5 Environment is server-assigned and you cannot choose it
+
+Your agent identity belongs to exactly one environment — **production** or **sandbox** — fixed on
+our side when the identity is issued. It is not a field in any request. If you send `environment`
+in a declaration body it is logged and **ignored**.
+
+> **The environment is not encoded in your agent id.** Identities issued for sandbox use
+> conventionally begin `SANDBOX-`, but that prefix is a label for human readers and carries no
+> technical meaning. Nothing in the rail reads it. Do not infer your environment from your id, do
+> not construct or rename an id expecting the environment to follow, and do not treat a
+> `SANDBOX-` prefix as evidence that traffic is isolated.
+
+**How to determine your environment.** Call `GET /api/v2/chain/verify` and read
+`summary.environment`. That is the only authoritative answer available to you.
+
+**What differs between the two.** Sandbox records seal to a separate chain under a separate genesis
+seed, so a sandbox event can never verify against production, or the reverse (§7). Sandbox chains
+are **not anchored, by design** — `anchor_status` reads
+`"not anchored - sandbox chains are not anchored by design"`.
+
+**`503 environment_unresolved`** (§2.4) means the rail could not determine your agent's
+environment. It is fail-closed: nothing was adjudicated and nothing was sealed, in either
+environment. Do not retry in a loop and do not perform the action — contact OQIRON.
 
 ---
 
