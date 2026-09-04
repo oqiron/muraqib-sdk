@@ -21,7 +21,7 @@ import time
 import urllib.error
 import urllib.request
 
-__version__ = "2.0.0"
+__version__ = "2.3.0"
 __all__ = ["MuraqibClient", "Decision", "UNAVAILABLE", "APPROVED", "BLOCKED", "ESCALATED", "__version__"]
 
 APPROVED    = "APPROVED"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "muraqib-client"
-version = "2.0.0"
+version = "2.3.0"
 description = "Canonical client for the MURAQIB AI-governance rail — fail-closed clearance, four-eyes assertion signing, chain verification."
 readme = "README.md"
 license = { file = "LICENSE" }

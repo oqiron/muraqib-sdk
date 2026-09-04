@@ -16,7 +16,10 @@ Follow these five steps in order. They take about five minutes.
 
 ## Step 1 — What OQIRON sends you
 
-**There is no self-serve signup.** Contact OQIRON. You will be sent:
+**Two ways to get credentials.** Request sandbox access at [oqiron.ai](https://oqiron.ai/platform#developers) — a person reviews each request, usually
+within one business day. For production, or if you need something the sandbox does not cover, contact OQIRON.
+
+Either way you will be sent:
 
 | you receive | what it looks like |
 |---|---|
@@ -57,14 +60,14 @@ fails.
 > **Shell commands, in the same activated terminal.**
 
 ```bash
-pip install git+https://github.com/oqiron/muraqib-sdk.git@v2.0.0
+pip install git+https://github.com/oqiron/muraqib-sdk.git@v2.3.0
 ```
 
 Only if you will perform four-eyes authorized actions (most integrations do not — see
 [Four-eyes](#four-eyes-authorized-actions)), install the signing extra instead:
 
 ```bash
-pip install "muraqib-client[signing] @ git+https://github.com/oqiron/muraqib-sdk.git@v2.0.0"
+pip install "muraqib-client[signing] @ git+https://github.com/oqiron/muraqib-sdk.git@v2.3.0"
 ```
 
 Check it worked:

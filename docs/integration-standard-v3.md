@@ -143,7 +143,7 @@ Metadata recorded but not adjudicated: `summary` (also scanned for PII), `reques
    **None of this comes from your request;**
 3. **four-eyes attestations** (Tier 2), adjudicated by the clearance and four-eyes controls.
 
-The authoritative catalogue is **57 controls**.
+The authoritative catalogue is **58 controls**.
 
 ### 2.3 Response
 
@@ -354,7 +354,7 @@ Sandbox verification correctly reports `tip_status: "no-signed-tip"` and
 | application | `2e1e0b37` |
 | chain module | `a6fd7d32` |
 | clearance module | `936e7e2a` |
-| CATALOG | **57 controls** |
+| CATALOG | **58 controls** |
 | recognized `action_type` values | **103**, in 28 classes |
 | production chain | tip **321**, anchored `id22 PERIODIC_TIP @321`, `pending_anchor 0` |
 | sandbox chain | tip **5**, unanchored by design |
